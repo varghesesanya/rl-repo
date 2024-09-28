@@ -6,6 +6,7 @@ from relaqs.environments import SingleQubitEnv, NoisySingleQubitEnv
 from relaqs.save_results import SaveResults
 from relaqs.plot_data import plot_data
 from relaqs.api import gates
+import qutip
 
 def run(env_class: gym.Env = SingleQubitEnv,
         target_gate: gates.Gate = gates.X(),
@@ -59,6 +60,7 @@ def run(env_class: gym.Env = SingleQubitEnv,
     # --------------------------------------------------------------
 
 if __name__ == "__main__":
+    print(qutip.__version__)
     env_class = NoisySingleQubitEnv
     target_gate = gates.Y()
     n_training_iterations = 50

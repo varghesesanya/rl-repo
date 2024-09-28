@@ -7,7 +7,7 @@ import json
 import ray
 from ray.rllib.algorithms.ddpg import DDPGConfig
 from ray.tune.registry import register_env
-from relaqs.environments.gate_synth_env_rllib_Haar import GateSynthEnvRLlibHaarNoisy
+# from relaqs.environments.gate_synth_env_rllib_Haar import GateSynthEnvRLlibHaarNoisy
 import numpy as np
 
 def env_creator(config):
