@@ -1,4 +1,7 @@
+from relaqs.api import gates
+from relaqs.environments.single_qubit_env import SingleQubitEnv
 from relaqs.save_results import SaveResults
+import gymnasium as gym
 from relaqs.plot_data import plot_data
 import numpy as np
 from relaqs.api.utils import do_inferencing, run
@@ -13,7 +16,8 @@ figure_title = "Inferencing with model"
 n_training_iterations = 1
 
 # -----------------------> Training model <------------------------
-alg = run(gate=H(), 
+alg = run(SingleQubitEnv,
+        gates.X(),
         n_training_iterations=n_training_iterations, 
         noise_file=noise_file
     )

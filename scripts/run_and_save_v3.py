@@ -61,7 +61,7 @@ def run(env_class: gym.Env = SingleQubitEnv,
 if __name__ == "__main__":
     env_class = NoisySingleQubitEnv
     target_gate = gates.Y()
-    n_training_iterations = 50
+    n_training_iterations = 15
     save = plot = True
     run(env_class, target_gate, n_training_iterations, save, plot)
     
