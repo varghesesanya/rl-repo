@@ -1,11 +1,14 @@
 import ray
 import numpy as np
+import time
 import pandas as pd
 from numpy.linalg import eigvalsh
+import ray
 from scipy.linalg import sqrtm
 from ray.rllib.algorithms.algorithm import Algorithm
 from ray.rllib.algorithms.ddpg import DDPGConfig
 from relaqs import RESULTS_DIR
+from relaqs.api import gates
 from relaqs.quantum_noise_data.get_data import (get_month_of_all_qubit_data, get_single_qubit_detuning)
 from relaqs.api.callbacks import GateSynthesisCallbacks
 from relaqs import QUANTUM_NOISE_DATA_DIR
@@ -15,6 +18,13 @@ vec = lambda X : X.reshape(-1, 1, order="F") # vectorization operation, column-o
 vec_inverse = lambda X : X.reshape(int(np.sqrt(X.shape[0])),
                                    int(np.sqrt(X.shape[0])),
                                    order="F") # inverse vectorization operation, column-order. X is a numpy array.
+
+def tic():
+    return time.time()
+
+def toc(start_time):
+    return time.time() - start_time
+
 
 def normalize(quantity, list_of_values):
     """ normalize quantity to [0, 1] range based on list of values """
@@ -78,7 +88,7 @@ def sample_noise_parameters(t1_t2_noise_file=None, detuning_noise_file=None):
 
     return list(t1_list), list(t2_list), detunings
 
-def do_inferencing(alg, n_episodes_for_inferencing, quantum_noise_file_path):
+def do_inferencing_new_noisy_env(alg, n_episodes_for_inferencing, quantum_noise_file_path):
     """
     alg: The trained model
     n_episodes_for_inferencing: Number of episodes to do during the training
@@ -111,6 +121,59 @@ def do_inferencing(alg, n_episodes_for_inferencing, quantum_noise_file_path):
             episode_reward = 0.0
     return env, alg
 
+def do_inferencing_new_gate(env, alg, n_episodes_for_inferencing, quantum_noise_file_path, new_gate=None):
+    from relaqs.environments.gate_synth_env_rllib_Haar import GateSynthEnvRLlibHaarNoisy
+
+    """
+    alg: The trained model
+    n_episodes_for_inferencing: Number of episodes to do during the training
+    """
+        
+    #  Create a new environment specifically for inference
+    inference_env_config = GateSynthEnvRLlibHaarNoisy.get_new_inference_gate_env_config(new_gate)
+    inference_env_config["U_target"] = new_gate.get_matrix()
+    inference_env_config["observation_space_size"] = 36
+    
+    t1_list, t2_list, detuning_list = sample_noise_parameters(quantum_noise_file_path)
+
+    inference_env_config["relaxation_rates_list"] = [np.reciprocal(t1_list).tolist(), np.reciprocal(t2_list).tolist()] # using real T1 data
+    inference_env_config["detuning_list"] = detuning_list
+    inference_env_config["relaxation_ops"] = [sigmam(),sigmaz()]
+    inference_env_config["observation_space_size"] = 2*16 + 1 + 2 + 1 # 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 2 for relaxation rate + 1 for detuning
+    inference_env_config["verbose"] = True
+    
+    inference_env = GateSynthEnvRLlibHaarNoisy(inference_env_config)
+
+    print("Inference environment created.")
+    
+
+    num_episodes = 0
+    episode_reward = 0.0
+    
+    obs, info = inference_env.reset()
+        
+    print("Starting Inferencing ...")
+    while num_episodes < n_episodes_for_inferencing:
+        print(f"Episode {num_episodes + 1}/{n_episodes_for_inferencing}")
+        
+        
+        # Compute an action using the trained algorithm.
+        a = alg.compute_single_action(
+            observation=obs,
+            policy_id="default_policy",  # Deafult Policy
+        )
+        # Send the computed action `a` to the env.
+        obs, reward, done, truncated, _ = inference_env.step(a)
+        episode_reward += reward
+        # Is the episode `done`? -> Reset.
+        if done:
+            print(f"Episode done: Total reward = {episode_reward}")
+            obs, info = inference_env.reset()
+            num_episodes += 1
+            episode_reward = 0.0
+    print("Inferencing complete.")    
+    return inference_env
+
 def load_model(path):
     "path (str): Path to the file usually beginning with the word 'checkpoint' " 
     loaded_model = Algorithm.from_checkpoint(path)
@@ -141,7 +204,7 @@ def get_best_actions(filename):
         best_actions.append(float_values)
     return best_actions, best_episode['Fidelity'].to_numpy() 
 
-def run(env_class, gate, n_training_iterations=1, noise_file=""):
+def run(env_class, gate, n_training_iterations=1, noise_file="", path_to_save_checkpoints=""):
     """Args
        gate (Gate type):
        n_training_iterations (int)
@@ -150,7 +213,13 @@ def run(env_class, gate, n_training_iterations=1, noise_file=""):
       alg (rllib.algorithms.algorithm)
 
     """
-    ray.init()
+    ray.init(
+        num_cpus=10,   # change to your available number of CPUs
+        num_gpus=1,
+        include_dashboard=False,
+        ignore_reinit_error=True,
+        log_to_driver=False,
+    )
     env_config = env_class.get_default_env_config()
     env_config["U_target"] = gate.get_matrix()
 
@@ -161,6 +230,7 @@ def run(env_class, gate, n_training_iterations=1, noise_file=""):
     env_config["detuning_list"] = detuning_list
     env_config["relaxation_ops"] = [sigmam(),sigmaz()]
     env_config["observation_space_size"] = 2*16 + 1 + 2 + 1 # 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 2 for relaxation rate + 1 for detuning
+    #env_config["observation_space_size"] = 9
     env_config["verbose"] = True
 
     # ---------------------> Configure algorithm and Environment <-------------------------
@@ -172,13 +242,14 @@ def run(env_class, gate, n_training_iterations=1, noise_file=""):
     alg_config.train_batch_size = env_class.get_default_env_config()["steps_per_Haar"]
 
     ### working 1-3 sets
-    alg_config.actor_lr = 4e-5
-    alg_config.critic_lr = 5e-4
+    alg_config.actor_lr = 2.647798844888383e-05
+    alg_config.critic_lr = 9.34899089380506e-05
 
     alg_config.actor_hidden_activation = "relu"
     alg_config.critic_hidden_activation = "relu"
     alg_config.num_steps_sampled_before_learning_starts = 1000
-    alg_config.actor_hiddens = [30,30,30]
+    alg_config.actor_hiddens = [300, 300, 300]  # Best actor hidden layers
+    alg_config.critic_hiddens = [50, 50, 50]  # Best critic hidden layers
     alg_config.exploration_config["scale_timesteps"] = 10000
 
     alg = alg_config.build()
@@ -186,10 +257,90 @@ def run(env_class, gate, n_training_iterations=1, noise_file=""):
     for _ in range(n_training_iterations):
         result = alg.train()
         list_of_results.append(result['hist_stats'])
+        save_result = alg.save(path_to_save_checkpoints)
+        path_to_checkpoint = save_result.checkpoint.path
+    print(
+    "Algorithm checkpoints have been created inside directory: "
+    f"'{path_to_checkpoint}'."
+)    
+    ray.shutdown()
+    return alg
+
+def run_multigate_training(env_class, gates, n_training_iterations=1, noise_file="", path_to_save_checkpoints=""):
+    """Train RL algorithm for multi-gate synthesis.
+    
+    Args:
+       env_class: Environment class for training.
+       gates (list): List of Gate objects (e.g., [gates.X(), gates.H()]).
+       n_training_iterations (int): Number of iterations per gate.
+       noise_file (str): Path to file with noise parameters.
+       path_to_save_checkpoints (str): Directory to save model checkpoints.
+
+    Returns:
+       alg: Trained RLlib algorithm.
+       results: List of training results for all gates.
+    """
+    ray.init(
+        num_cpus=12,   # Change to your available number of CPUs
+        num_gpus=10,
+        include_dashboard=False,
+        ignore_reinit_error=True,
+        log_to_driver=False,
+    )
+
+    # Initialize result storage
+    results = []
+
+    # Initialize algorithm and environment config
+    env_config = env_class.get_default_env_config()
+    t1_list, t2_list, detuning_list = sample_noise_parameters(noise_file)
+    env_config["relaxation_rates_list"] = [np.reciprocal(t1_list).tolist(), np.reciprocal(t2_list).tolist()] 
+    env_config["detuning_list"] = detuning_list
+    env_config["relaxation_ops"] = [sigmam(), sigmaz()]
+    env_config["observation_space_size"] = 9
+    env_config["verbose"] = True
+
+    alg_config = DDPGConfig()
+    alg_config.framework("torch")
+    alg_config.rollouts(batch_mode="complete_episodes")
+    alg_config.callbacks(GateSynthesisCallbacks)
+    alg_config.train_batch_size = env_class.get_default_env_config()["steps_per_Haar"]
+
+    # Configure network architecture and hyperparameters
+    alg_config.actor_lr = 4e-5
+    alg_config.critic_lr = 5e-4
+    alg_config.actor_hidden_activation = "relu"
+    alg_config.critic_hidden_activation = "relu"
+    alg_config.num_steps_sampled_before_learning_starts = 1000
+    alg_config.actor_hiddens = [30, 30, 30]
+    alg_config.exploration_config["scale_timesteps"] = 10000
+
+    # Iterate over each gate for training
+    for gate in gates:
+        print(f"Training on gate: {gate}")
+
+        # Update target gate in the environment config
+        env_config["U_target"] = gate.get_matrix()
+        alg_config.environment(env_class, env_config=env_config)
+
+        # Build or reload the algorithm
+        alg = alg_config.build()
+        gate_results = []
+
+        for _ in range(n_training_iterations):
+            result = alg.train()
+            gate_results.append(result['hist_stats'])
+
+            # Save checkpoint for the current gate
+            save_result = alg.save(path_to_save_checkpoints)
+            path_to_checkpoint = save_result.checkpoint.path
+
+        print(f"Checkpoint for gate {gate} saved at: {path_to_checkpoint}")
+        results.append({"gate": gate, "results": gate_results, "checkpoint": path_to_checkpoint})
 
     ray.shutdown()
+    return alg, results
 
-    return alg
 
 def return_env_from_alg(alg):
     env = alg.workers.local_worker().env
