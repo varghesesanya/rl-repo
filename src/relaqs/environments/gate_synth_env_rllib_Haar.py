@@ -7,6 +7,7 @@ from qutip.superoperator import liouvillian, spre, spost
 from qutip import Qobj, tensor
 from qutip.operators import *
 from qutip import cnot, cphase
+from relaqs.api import gates
 #from relaqs.api.reward_functions import negative_matrix_difference_norm
 
 sig_p = np.array([[0, 1], [0, 0]])
@@ -206,7 +207,26 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
             "relaxation_rates_list": [[314159]], # relaxation lists of list of floats to be sampled from when resetting environment. (10 usec)
             "relaxation_ops": [sigmam()], #relaxation operator lists for T1 and T2, respectively
 #            "observation_space_size": 35, # 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 2 for relaxation rate
-            "observation_space_size": 2*16 + 1 + 1 + 1 # 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
+            "observation_space_size": 36# 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
+        }
+        
+    def get_new_inference_gate_env_config(target_gate):
+        return {
+            # "action_space_size": 3,
+            "action_space_size": 2,
+            "U_initial": I,  # staring with I
+            "U_target": target_gate.get_matrix(),  # target for Y
+            "final_time": 35.5556E-9, # in seconds
+            "num_Haar_basis": 1,  # number of Haar basis (need to update for odd combinations)
+            "steps_per_Haar": 2,  # steps per Haar basis per episode
+            "delta": [0],  # qubit detuning
+            "save_data_every_step": 1,
+            "verbose": True,
+#            "relaxation_rates_list": [[0.01,0.02],[0.05, 0.07]], # relaxation lists of list of floats to be sampled from when resetting environment.
+#            "relaxation_ops": [sigmam(),sigmaz()] #relaxation operator lists for T1 and T2, respectively
+            "relaxation_rates_list": [[314159]], # relaxation lists of list of floats to be sampled from when resetting environment. (10 usec)
+            "relaxation_ops": [sigmam()], #relaxation operator lists for T1 and T2, respectively
+            "observation_space_size": 36 # 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
         }
 
     def __init__(self, env_config):
@@ -266,7 +286,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         return np.append([self.compute_fidelity()]+[x//6283185 for x in self.relaxation_rate]+normalizedDetuning, self.unitary_to_observation(self.U)) #6283185 assuming 500 nanosecond relaxation is max
     
     def compute_fidelity(self):
-        env_config = GateSynthEnvRLlibHaarNoisy.get_default_env_config()
+        env_config = GateSynthEnvRLlibHaarNoisy.get_new_inference_gate_env_config(gates.Y())
         U_target_dagger = self.unitary_to_superoperator(env_config["U_target"].conjugate().transpose())
         return float(np.abs(np.trace(U_target_dagger @ self.U))) / (self.U.shape[0])
 
