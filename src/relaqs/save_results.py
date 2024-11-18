@@ -59,11 +59,17 @@ class SaveResults():
 
         return path
 
-    def save_env_transitions(self):
+    def save_env_transitions_train(self):
         columns = ['Fidelity', 'Rewards', 'Actions', 'Operator', 'Episode Id']
         df = pd.DataFrame(self.env.transition_history, columns=columns)
-        df.to_pickle(self.save_path + "env_data.pkl") # easier to load than csv
-        df.to_csv(self.save_path + "env_data.csv", index=False) # backup in case pickle doesn't work
+        df.to_pickle(self.save_path + "env_data_train.pkl") # easier to load than csv
+        df.to_csv(self.save_path + "env_data_train.csv", index=False) # backup in case pickle doesn't work
+        
+    def save_env_transitions_inference(self):
+        columns = ['Fidelity', 'Rewards', 'Actions', 'Operator', 'Episode Id']
+        df = pd.DataFrame(self.env.transition_history, columns=columns)
+        df.to_pickle(self.save_path + "env_data_inference.pkl") # easier to load than csv
+        df.to_csv(self.save_path + "env_data_inference.csv", index=False) # backup in case pickle doesn't work    
     
     def save_train_results_data(self):
         with open(self.save_path+'train_results_data.json', 'w') as f:
@@ -79,9 +85,13 @@ class SaveResults():
         save_model_path = self.save_path + "model_checkpoints/"
         self.alg.save(save_model_path)
 
-    def save_results(self):
-        if self.env is not None:
-            self.save_env_transitions()
+    def save_results(self, train_or_inference):
+        if train_or_inference == "train":
+            if self.env is not None:
+                self.save_env_transitions_train()
+        elif train_or_inference == "inference":
+            if self.env is not None:
+                self.save_env_transitions_inference()       
         if self.alg is not None:
             self.save_config(self.alg.get_config().to_dict())
             self.save_model()

@@ -286,9 +286,12 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         return np.append([self.compute_fidelity()]+[x//6283185 for x in self.relaxation_rate]+normalizedDetuning, self.unitary_to_observation(self.U)) #6283185 assuming 500 nanosecond relaxation is max
     
     def compute_fidelity(self):
-        env_config = GateSynthEnvRLlibHaarNoisy.get_new_inference_gate_env_config(gates.Y())
-        U_target_dagger = self.unitary_to_superoperator(env_config["U_target"].conjugate().transpose())
-        return float(np.abs(np.trace(U_target_dagger @ self.U))) / (self.U.shape[0])
+        # Convert the target unitary to Liouville space
+        U_target_dagger = self.U_target.conjugate().transpose()
+        
+        # Compute fidelity
+        fidelity = float(np.abs(np.trace(U_target_dagger @ self.U))) / self.U.shape[0]
+        return fidelity
 
     def unitary_to_observation(self, U):
         return (

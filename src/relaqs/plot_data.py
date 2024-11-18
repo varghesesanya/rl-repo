@@ -53,10 +53,10 @@ def plot_results(save_dir, figure_title=""):
     plt.savefig(save_dir + "gradient_and_q_values.png")
 
 
-def plot_data(save_dir, episode_length, figure_title=''):
+def plot_data(save_dir, episode_length, figure_title='', env_data_path=''):
     """ Currently works for constant episode_length """
     #---------------------- Getting data from files  <--------------------------------------
-    df = pd.read_csv(save_dir + "env_data.csv", header=0)
+    df = pd.read_csv(save_dir + env_data_path, header=0)
     fidelities = np.array(df.iloc[:,0])
     rewards = np.array(df.iloc[:,1])
     episode_ids = np.array(df.iloc[:,4])
@@ -141,3 +141,69 @@ def plot_data(save_dir, episode_length, figure_title=''):
 if __name__ == "__main__":
     save_dir = RESULTS_DIR + "2024-02-27_19-31-17_H/"
     plot_data(save_dir, episode_length=2, figure_title="")
+
+
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+def plot_training_and_inferencing(
+    training_save_dir, 
+    inference_save_dir, 
+    training_gate_name="Training Gate", 
+    inference_gate_name="Inference Gate", 
+    figure_title="Training vs Inference", 
+    save_path=None
+):
+    """
+    Plot training and inference data side by side with gate names and optionally save the plot as an image.
+
+    Args:
+        training_save_dir (str): Directory containing training results.
+        inference_save_dir (str): Directory containing inference results.
+        training_gate_name (str): Name of the gate used during training.
+        inference_gate_name (str): Name of the gate used during inference.
+        figure_title (str): Title of the figure.
+        save_path (str): Path to save the plot image. If None, the plot will not be saved.
+    """
+    # Load data
+    train_data = pd.read_csv(f"{training_save_dir}/env_data_train.csv")
+    inference_data = pd.read_csv(f"{inference_save_dir}/env_data_inference.csv")
+    
+    # Extract metrics (e.g., fidelity, rewards)
+    train_fidelity = train_data['Fidelity'] if 'Fidelity' in train_data.columns else None
+    inference_fidelity = inference_data['Fidelity'] if 'Fidelity' in inference_data.columns else None
+
+    # Create subplots
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6), sharey=True)
+    
+    # Training plot
+    if train_fidelity is not None:
+        axs[0].plot(train_fidelity, label=f"Fidelity ({training_gate_name})", color='blue')
+        axs[0].set_title(f"Training Results ({training_gate_name})")
+        axs[0].set_xlabel("Episodes")
+        axs[0].set_ylabel("Fidelity")
+        axs[0].legend()
+    else:
+        axs[0].text(0.5, 0.5, "No training fidelity data", horizontalalignment='center', verticalalignment='center')
+
+    # Inference plot
+    if inference_fidelity is not None:
+        axs[1].plot(inference_fidelity, label=f"Fidelity ({inference_gate_name})", color='green')
+        axs[1].set_title(f"Inference Results ({inference_gate_name})")
+        axs[1].set_xlabel("Episodes")
+        axs[1].legend()
+    else:
+        axs[1].text(0.5, 0.5, "No inference fidelity data", horizontalalignment='center', verticalalignment='center')
+
+    # Set the overall title and layout
+    fig.suptitle(figure_title)
+    plt.tight_layout()
+    
+    # Save the plot if save_path is provided
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to {save_path}")
+    
+    # Show the plot
+    plt.show()
