@@ -8,6 +8,8 @@ from qutip import Qobj, tensor
 from qutip.operators import *
 from qutip import cnot, cphase
 from relaqs.api import gates
+import torch
+import torch.nn as nn
 #from relaqs.api.reward_functions import negative_matrix_difference_norm
 
 sig_p = np.array([[0, 1], [0, 0]])
@@ -16,6 +18,7 @@ X = np.array([[0, 1], [1, 0]])
 Z = np.array([[1, 0], [0, -1]])
 I = np.array([[1, 0], [0, 1]])
 Y = np.array([[0, 1j], [-1j, 0]])
+H = 1/np.sqrt(2) * np.array([[1, 1],[1, -1]])
 
 
 #two-qubit single qubit gates
@@ -207,15 +210,15 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
             "relaxation_rates_list": [[314159]], # relaxation lists of list of floats to be sampled from when resetting environment. (10 usec)
             "relaxation_ops": [sigmam()], #relaxation operator lists for T1 and T2, respectively
 #            "observation_space_size": 35, # 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 2 for relaxation rate
-            "observation_space_size": 36# 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
+            "observation_space_size": 40# 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
         }
-        
-    def get_new_inference_gate_env_config(target_gate):
+    def get_env_config_multigate(cls, target_gate=None):
         return {
             # "action_space_size": 3,
             "action_space_size": 2,
             "U_initial": I,  # staring with I
-            "U_target": target_gate.get_matrix(),  # target for Y
+            "U_target": target_gate.get_matrix(),
+            "U_target_key":target_gate.__str__(),
             "final_time": 35.5556E-9, # in seconds
             "num_Haar_basis": 1,  # number of Haar basis (need to update for odd combinations)
             "steps_per_Haar": 2,  # steps per Haar basis per episode
@@ -226,12 +229,33 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
 #            "relaxation_ops": [sigmam(),sigmaz()] #relaxation operator lists for T1 and T2, respectively
             "relaxation_rates_list": [[314159]], # relaxation lists of list of floats to be sampled from when resetting environment. (10 usec)
             "relaxation_ops": [sigmam()], #relaxation operator lists for T1 and T2, respectively
-            "observation_space_size": 36 # 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
+#            "observation_space_size": 35, # 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 2 for relaxation rate
+            "observation_space_size": 40# 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
+        }
+        
+    def get_new_inference_gate_env_config(target_gate):
+        return {
+            # "action_space_size": 3,
+            "action_space_size": 2,
+            "U_initial": I,  # staring with I
+            "U_target": target_gate.get_matrix(),  # target for Y
+            "U_target_key":target_gate.__str__(),
+            "final_time": 35.5556E-9, # in seconds
+            "num_Haar_basis": 1,  # number of Haar basis (need to update for odd combinations)
+            "steps_per_Haar": 2,  # steps per Haar basis per episode
+            "delta": [0],  # qubit detuning
+            "save_data_every_step": 1,
+            "verbose": True,
+#            "relaxation_rates_list": [[0.01,0.02],[0.05, 0.07]], # relaxation lists of list of floats to be sampled from when resetting environment.
+#            "relaxation_ops": [sigmam(),sigmaz()] #relaxation operator lists for T1 and T2, respectively
+            "relaxation_rates_list": [[314159]], # relaxation lists of list of floats to be sampled from when resetting environment. (10 usec)
+            "relaxation_ops": [sigmam()], #relaxation operator lists for T1 and T2, respectively
+            "observation_space_size": 40# 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
         }
 
     def __init__(self, env_config):
         self.final_time = env_config["final_time"]  # Final time for the gates
-        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(env_config["observation_space_size"],))  # propagation operator elements + fidelity
+        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(env_config["observation_space_size"],), dtype=np.float32)  # propagation operator elements + fidelity
         # self.action_space = gym.spaces.Box(low=np.array([-1, -1, -1]), high=np.array([1, 1, 1])) # for detuning included control
         self.action_space = gym.spaces.Box(low=np.array([-1, -1]), high=np.array([1, 1]))
 #        self.delta = [env_config["delta"]]  # detuning
@@ -239,6 +263,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         self.detuning = 0
         self.detuning_update()
         self.U_target = self.unitary_to_superoperator(env_config["U_target"])
+        self.U_target_key = env_config["U_target_key"]
         self.U_initial = self.unitary_to_superoperator(env_config["U_initial"])
         self.num_Haar_basis = env_config["num_Haar_basis"]
         self.steps_per_Haar = env_config["steps_per_Haar"]
@@ -259,6 +284,9 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         self.gamma_magnitude_max = 1.8 * np.pi / self.final_time / self.steps_per_Haar
         self.transition_history = []
         self.episode_id = None
+        self.gate_to_index = {"X": 0, "Y":1, "Z": 2, "H": 3}
+        self.embedding_dim = 4
+        self.embedding_layer = nn.Embedding(num_embeddings=len(self.gate_to_index), embedding_dim=self.embedding_dim)
 
     def detuning_update(self):
         # Random detuning selection
@@ -282,8 +310,29 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         return sampled_rate_list
             
     def get_observation(self):
-        normalizedDetuning = [(self.detuning - min(self.delta)+1E-15)/(max(self.delta)-min(self.delta)+1E-15)]
-        return np.append([self.compute_fidelity()]+[x//6283185 for x in self.relaxation_rate]+normalizedDetuning, self.unitary_to_observation(self.U)) #6283185 assuming 500 nanosecond relaxation is max
+        # Get embedding for the current gate
+        gate_index = self.gate_to_index[self.U_target_key]
+        gate_embedding = self.embedding_layer(torch.tensor(gate_index)).detach().numpy()
+
+        # Normalize detuning
+        normalizedDetuning = [(self.detuning - min(self.delta) + 1E-15) / (max(self.delta) - min(self.delta) + 1E-15)]
+
+        # Build old observation space
+        old_observation_space = np.append(
+            [self.compute_fidelity()] + 
+            [x // 6283185 for x in self.relaxation_rate] + 
+            normalizedDetuning, 
+            self.unitary_to_observation(self.U)
+        )
+
+        # Concatenate old observation space with gate embedding
+        new_observation_space = np.concatenate([old_observation_space, gate_embedding])
+
+        # Clip or normalize to ensure values are within bounds
+        new_observation_space = np.clip(new_observation_space, 0.0, 1.0).astype(np.float32)
+
+        return new_observation_space
+
     
     def compute_fidelity(self):
         # Convert the target unitary to Liouville space

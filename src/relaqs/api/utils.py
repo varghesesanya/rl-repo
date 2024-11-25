@@ -268,36 +268,35 @@ def run(env_class, gate, n_training_iterations=1, noise_file="", path_to_save_ch
 
 def run_multigate_training(env_class, gates, n_training_iterations=1, noise_file="", path_to_save_checkpoints=""):
     """Train RL algorithm for multi-gate synthesis.
-    
+
     Args:
-       env_class: Environment class for training.
-       gates (list): List of Gate objects (e.g., [gates.X(), gates.H()]).
-       n_training_iterations (int): Number of iterations per gate.
-       noise_file (str): Path to file with noise parameters.
-       path_to_save_checkpoints (str): Directory to save model checkpoints.
+        env_class: Environment class for training.
+        gates (list): List of Gate objects (e.g., [gates.X(), gates.H()]).
+        n_training_iterations (int): Number of iterations per gate.
+        noise_file (str): Path to file with noise parameters.
+        path_to_save_checkpoints (str): Directory to save model checkpoints.
 
     Returns:
-       alg: Trained RLlib algorithm.
-       results: List of training results for all gates.
+        alg: Trained RLlib algorithm.
+        results: List of training results for all gates.
     """
+    # Initialize Ray
     ray.init(
-        num_cpus=12,   # Change to your available number of CPUs
+        num_cpus=12,  # Adjust based on your system
         num_gpus=10,
         include_dashboard=False,
         ignore_reinit_error=True,
         log_to_driver=False,
     )
-
-    # Initialize result storage
     results = []
 
-    # Initialize algorithm and environment config
-    env_config = env_class.get_default_env_config()
+    # Initialize environment and algorithm configuration
+    env_config = env_class.get_env_config_multigate(env_class, target_gate=gates[0])
     t1_list, t2_list, detuning_list = sample_noise_parameters(noise_file)
-    env_config["relaxation_rates_list"] = [np.reciprocal(t1_list).tolist(), np.reciprocal(t2_list).tolist()] 
+    env_config["relaxation_rates_list"] = [np.reciprocal(t1_list).tolist(), np.reciprocal(t2_list).tolist()]
     env_config["detuning_list"] = detuning_list
     env_config["relaxation_ops"] = [sigmam(), sigmaz()]
-    env_config["observation_space_size"] = 9
+    env_config["observation_space_size"] = 40
     env_config["verbose"] = True
 
     alg_config = DDPGConfig()
@@ -315,16 +314,22 @@ def run_multigate_training(env_class, gates, n_training_iterations=1, noise_file
     alg_config.actor_hiddens = [30, 30, 30]
     alg_config.exploration_config["scale_timesteps"] = 10000
 
-    # Iterate over each gate for training
+    # Build the algorithm once
+    alg_config.environment(env_class, env_config=env_config)
+    alg = alg_config.build()
+
+    # Train on each gate
     for gate in gates:
         print(f"Training on gate: {gate}")
 
-        # Update target gate in the environment config
+        # Update target gate in the environment configuration
         env_config["U_target"] = gate.get_matrix()
-        alg_config.environment(env_class, env_config=env_config)
+        env_config["U_target_key"] = gate.__str__()
 
-        # Build or reload the algorithm
-        alg = alg_config.build()
+        # Update the environment in the algorithm
+        alg.workers.foreach_worker(
+            lambda worker: worker.env.reset())
+
         gate_results = []
 
         for _ in range(n_training_iterations):
@@ -340,11 +345,6 @@ def run_multigate_training(env_class, gates, n_training_iterations=1, noise_file
 
     ray.shutdown()
     return alg, results
-
-
-def return_env_from_alg(alg):
-    env = alg.workers.local_worker().env
-    return env
 
 def load_and_analyze_best_unitary(data_path, U_target):
     df = pd.read_csv(data_path, names=['Fidelity', 'Reward', 'Actions', 'Flattened U', 'Episode Id'], header=0)
