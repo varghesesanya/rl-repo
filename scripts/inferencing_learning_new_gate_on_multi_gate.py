@@ -1,16 +1,10 @@
 
 from relaqs.api import gates
 from relaqs.environments.gate_synth_env_rllib_Haar import GateSynthEnvRLlibHaarNoisy
-from relaqs.environments.noisy_single_qubit_env import NoisySingleQubitEnv
-from relaqs.environments.single_qubit_env import SingleQubitEnv
 from relaqs.plot_data import plot_data, plot_training_and_inferencing
 from relaqs.save_results import SaveResults
 from relaqs.api.utils import do_inferencing_new_gate, run_multigate_training, tic, toc
 import pandas as pd
-
-
-training_gates = [gates.X(), gates.Y(), gates.Z()]
-
 
 start = tic()
 
@@ -23,8 +17,9 @@ save_inference = True
 plot = True
 figure_title_training = "Training with Target Gate X"
 figure_title_inference = "Inferencing with Target Gate Y"
-n_training_iterations = 1
+n_training_iterations = 10
 path_to_save_checkpoints = "/Users/sanyavarghese/rl-repo/src/policies/checkpoints/new_gate"
+multi_gate_training_list = [gates.X(), gates.Y(), gates.Z(), gates.H()]
 
 
 #-----------------------> Training model <------------------------
@@ -34,7 +29,7 @@ path_to_save_checkpoints = "/Users/sanyavarghese/rl-repo/src/policies/checkpoint
 # except ValueError:``
 #     print("No saved model found. Training a new model...")
 trained_alg, results = run_multigate_training(env_class=GateSynthEnvRLlibHaarNoisy,
-        gates = training_gates,
+        gate = multi_gate_training_list[0],
         n_training_iterations=n_training_iterations,
         noise_file=noise_file, path_to_save_checkpoints=path_to_save_checkpoints
 )
@@ -87,14 +82,18 @@ training_gate_name = "X, Y, Z and H Gates"
 inference_gate_name = "Y Gate"
 plot_save_path = "./training_vs_inference_fidelity_with_gate_names.png"
 
-# Plot training vs inference and save the plot
-plot_training_and_inferencing(
-    training_save_dir=save_dir_training,       
-    inference_save_dir=save_dir_inference,  
-    training_gate_name=training_gate_name,  
-    inference_gate_name=inference_gate_name, 
-    figure_title="Training vs Inference Fidelity",
-    save_path=plot_save_path            # Path to save the plot
-)
+# # Plot training vs inference and save the plot
+# plot_training_and_inferencing(
+#     training_save_dir=save_dir_training,       
+#     inference_save_dir=save_dir_inference,  
+#     training_gate_name=training_gate_name,  
+#     inference_gate_name=inference_gate_name, 
+#     figure_title="Training vs Inference Fidelity",
+#     save_path=plot_save_path            # Path to save the plot
+# )
+
+
+#plot_U_history(env.transition_history)
+
 
 print(f"Elapsed Time: {toc(start):.4f} seconds")

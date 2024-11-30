@@ -266,7 +266,7 @@ def run(env_class, gate, n_training_iterations=1, noise_file="", path_to_save_ch
     ray.shutdown()
     return alg
 
-def run_multigate_training(env_class, gates, n_training_iterations=1, noise_file="", path_to_save_checkpoints=""):
+def run_multigate_training(env_class, gate, n_training_iterations=1, noise_file="", path_to_save_checkpoints=""):
     """Train RL algorithm for multi-gate synthesis.
 
     Args:
@@ -282,8 +282,8 @@ def run_multigate_training(env_class, gates, n_training_iterations=1, noise_file
     """
     # Initialize Ray
     ray.init(
-        num_cpus=12,  # Adjust based on your system
-        num_gpus=10,
+        num_cpus=10,  # Adjust based on your system
+        num_gpus=1,
         include_dashboard=False,
         ignore_reinit_error=True,
         log_to_driver=False,
@@ -291,7 +291,7 @@ def run_multigate_training(env_class, gates, n_training_iterations=1, noise_file
     results = []
 
     # Initialize environment and algorithm configuration
-    env_config = env_class.get_env_config_multigate(env_class, target_gate=gates[0])
+    env_config = env_class.get_env_config_multigate(env_class, target_gate=gate)
     t1_list, t2_list, detuning_list = sample_noise_parameters(noise_file)
     env_config["relaxation_rates_list"] = [np.reciprocal(t1_list).tolist(), np.reciprocal(t2_list).tolist()]
     env_config["detuning_list"] = detuning_list
@@ -306,11 +306,11 @@ def run_multigate_training(env_class, gates, n_training_iterations=1, noise_file
     alg_config.train_batch_size = env_class.get_default_env_config()["steps_per_Haar"]
 
     # Configure network architecture and hyperparameters
-    alg_config.actor_lr = 4e-5
-    alg_config.critic_lr = 5e-4
+    alg_config.actor_lr = 1e-3
+    alg_config.critic_lr = 1e-3
     alg_config.actor_hidden_activation = "relu"
     alg_config.critic_hidden_activation = "relu"
-    alg_config.num_steps_sampled_before_learning_starts = 1000
+    alg_config.num_steps_sampled_before_learning_starts = 1
     alg_config.actor_hiddens = [30, 30, 30]
     alg_config.exploration_config["scale_timesteps"] = 10000
 
@@ -318,30 +318,17 @@ def run_multigate_training(env_class, gates, n_training_iterations=1, noise_file
     alg_config.environment(env_class, env_config=env_config)
     alg = alg_config.build()
 
-    # Train on each gate
-    for gate in gates:
-        print(f"Training on gate: {gate}")
 
-        # Update target gate in the environment configuration
-        env_config["U_target"] = gate.get_matrix()
-        env_config["U_target_key"] = gate.__str__()
+    gate_results = []
+    for i in range(n_training_iterations):
+        result = alg.train()   
+        gate_results.append(result['hist_stats'])
 
-        # Update the environment in the algorithm
-        alg.workers.foreach_worker(
-            lambda worker: worker.env.reset())
+        save_result = alg.save(path_to_save_checkpoints)
+        path_to_checkpoint = save_result.checkpoint.path
 
-        gate_results = []
-
-        for _ in range(n_training_iterations):
-            result = alg.train()
-            gate_results.append(result['hist_stats'])
-
-            # Save checkpoint for the current gate
-            save_result = alg.save(path_to_save_checkpoints)
-            path_to_checkpoint = save_result.checkpoint.path
-
-        print(f"Checkpoint for gate {gate} saved at: {path_to_checkpoint}")
-        results.append({"gate": gate, "results": gate_results, "checkpoint": path_to_checkpoint})
+    print(f"Checkpoint for gate {env_config['U_target']} saved at: {path_to_checkpoint}")
+    results.append({"gate": env_config["U_target"], "results": gate_results, "checkpoint": path_to_checkpoint})
 
     ray.shutdown()
     return alg, results

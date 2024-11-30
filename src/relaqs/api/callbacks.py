@@ -9,6 +9,11 @@ from  torch.linalg import vector_norm
 from typing import Dict, Tuple
 
 class GateSynthesisCallbacks(DefaultCallbacks):
+    def __init__(self, target_fidelity=0.8, check_steps=5):
+        self.target_fidelity = target_fidelity
+        self.check_steps = check_steps
+        super().__init__()
+        
     def on_episode_start(
         self,
         *,
@@ -25,6 +30,13 @@ class GateSynthesisCallbacks(DefaultCallbacks):
         episode.hist_data["average_gradnorm"] =[]
         episode.hist_data["actions"]=[]
         
+    def on_episode_end(self, *, worker, base_env, policies, episode, **kwargs):
+        env = base_env.get_sub_environments()[0]  # Assuming a single environment
+        # Use the normalized threshold
+        if env.is_fidelity_consistent(threshold=self.target_fidelity, steps=self.check_steps):
+            print(f"Gate {env.U_target_key}: Fidelity consistent! Moving to next gate.")
+            env.next_environment()
+                         
     def on_postprocess_trajectory(
             self,
             *,
