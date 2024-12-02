@@ -1,7 +1,6 @@
-
 from relaqs.api import gates
 from relaqs.environments.gate_synth_env_rllib_Haar import GateSynthEnvRLlibHaarNoisy
-from relaqs.plot_data import plot_data, plot_training_and_inferencing
+from relaqs.plot_data import plot_data
 from relaqs.save_results import SaveResults
 from relaqs.api.utils import do_inferencing_new_gate, run_multigate_training, tic, toc
 import pandas as pd

@@ -293,6 +293,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         self.fidelity_history = []
         self.multi_gate_training_list = [gates.X(), gates.Y(), gates.Z(), gates.H()]
         self.current_target_gate_pointer = 0
+        self.timesteps_total = 0  # Tracks the total number of timesteps across all episodes
 
     def detuning_update(self):
         # Random detuning selection
@@ -385,22 +386,19 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         return (delta + alpha) * Z + gamma_magnitude * (np.cos(gamma_phase) * X + np.sin(gamma_phase) * Y)
     
     def is_fidelity_consistent(self, threshold, steps):
-        # Normalize threshold to match the [-1, 1] fidelity scale
-        normalized_threshold = 2 * threshold - 1  # Map [0, 1] threshold to [-1, 1]
-        
         # Check if the fidelity history consistently meets or exceeds the threshold
         if len(self.fidelity_history) < steps:
             return False
         
         recent_fidelities = self.fidelity_history[-steps:]
-        return all(f >= normalized_threshold for f in recent_fidelities)
+        return all(f >= threshold for f in recent_fidelities)
     
     def next_environment(self):
-        print("IN THE NEXT ENVIRONMENT SPACE")
+        print(f"Gate switch occurred at timestep {self.timesteps_total}.")
         # Update to the next gate in the circular pointer
         self.current_target_gate_pointer = (self.current_target_gate_pointer + 1) % len(self.multi_gate_training_list)
         next_gate = self.multi_gate_training_list[self.current_target_gate_pointer]
-        
+              
         # Update target unitary and its key
         self.U_target = self.unitary_to_superoperator(next_gate.get_matrix())
         self.U_target_key = next_gate.__str__()
@@ -423,12 +421,12 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         self.relaxation_rate = self.get_relaxation_rate()
         self.detuning = 0
         self.detuning_update()
-        self.fidelity_history = []  # Clear fidelity history
         starting_observation = self.get_observation()
         info = {}
         return starting_observation, info
 
     def step(self, action):
+        self.timesteps_total +=1
         num_time_bins = 2 ** (self.current_Haar_num - 1) # Haar number decides the number of time bins
 
         # action space setting
@@ -471,7 +469,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         # Reward and fidelity calculation
         fidelity = self.compute_fidelity()
         reward = (-3 * np.log10(1.0 - fidelity) + np.log10(1.0 - self.prev_fidelity)) + (3 * fidelity - self.prev_fidelity)
-        #reward = negative_matrix_difference_norm(self.U_target, self.U)
+        #reward = fidelity**2 - self.prev_fidelity**2
         self.prev_fidelity = fidelity
 
         self.state = self.get_observation()
@@ -491,7 +489,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
             )
         # Tracking Fidelity 
         self.fidelity_history.append(fidelity)
-        if len(self.fidelity_history) > 10:  # Keep only the last 10 fidelities
+        if len(self.fidelity_history) > 25:  # Keep only the last 10 fidelities
             self.fidelity_history.pop(0)
             
         self.transition_history.append([fidelity, reward, action.tolist(), self.U.flatten(), self.episode_id])

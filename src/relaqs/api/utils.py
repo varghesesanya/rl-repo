@@ -310,9 +310,9 @@ def run_multigate_training(env_class, gate, n_training_iterations=1, noise_file=
     alg_config.critic_lr = 1e-3
     alg_config.actor_hidden_activation = "relu"
     alg_config.critic_hidden_activation = "relu"
-    alg_config.num_steps_sampled_before_learning_starts = 1
+    alg_config.num_steps_sampled_before_learning_starts = 1000
     alg_config.actor_hiddens = [30, 30, 30]
-    alg_config.exploration_config["scale_timesteps"] = 10000
+    alg_config.exploration_config["scale_timesteps"] = 5000
 
     # Build the algorithm once
     alg_config.environment(env_class, env_config=env_config)

@@ -9,11 +9,21 @@ from  torch.linalg import vector_norm
 from typing import Dict, Tuple
 
 class GateSynthesisCallbacks(DefaultCallbacks):
-    def __init__(self, target_fidelity=0.8, check_steps=5):
+    def __init__(self, target_fidelity=0.9, check_steps=5):
         self.target_fidelity = target_fidelity
         self.check_steps = check_steps
+        self.learning_started = False  # Add a flag to track learning state
         super().__init__()
         
+    def on_train_result(self, *, algorithm, result, **kwargs):
+        # Check the number of steps sampled so far
+        steps_sampled = result["timesteps_total"]
+        learning_threshold = algorithm.config["num_steps_sampled_before_learning_starts"]
+        
+        if steps_sampled >= learning_threshold and not self.learning_started:
+            print(f"Learning started! Steps sampled: {steps_sampled}")
+            self.learning_started = True  # Update the flag
+            
     def on_episode_start(
         self,
         *,
@@ -30,12 +40,27 @@ class GateSynthesisCallbacks(DefaultCallbacks):
         episode.hist_data["average_gradnorm"] =[]
         episode.hist_data["actions"]=[]
         
-    def on_episode_end(self, *, worker, base_env, policies, episode, **kwargs):
+    def on_episode_end(self, *, worker="RolloutWorker", base_env, policies, episode, **kwargs):
         env = base_env.get_sub_environments()[0]  # Assuming a single environment
         # Use the normalized threshold
         if env.is_fidelity_consistent(threshold=self.target_fidelity, steps=self.check_steps):
             print(f"Gate {env.U_target_key}: Fidelity consistent! Moving to next gate.")
             env.next_environment()
+            # Increase exploration for the next 1000 timesteps (adjust as needed)
+            target_timestep = env.timesteps_total + 5000  # Adjust exploration duration
+            
+            
+            # Update the exploration configuration to continue exploration
+            worker.policy_map["default_policy"].config["exploration_config"]["scale_timesteps"] = target_timestep
+
+            # # Optionally, freeze critic temporarily
+            # self.training_on_new_gate = True
+
+            # # Optionally freeze critic for initial steps in the new task
+            # for param in self.critic.parameters():
+            #     param.requires_grad = False        
+           
+                  
                          
     def on_postprocess_trajectory(
             self,
