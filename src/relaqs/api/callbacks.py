@@ -9,7 +9,7 @@ from  torch.linalg import vector_norm
 from typing import Dict, Tuple
 
 class GateSynthesisCallbacks(DefaultCallbacks):
-    def __init__(self, target_fidelity=0.9, check_steps=5):
+    def __init__(self, target_fidelity=0.9, check_steps=10):
         self.target_fidelity = target_fidelity
         self.check_steps = check_steps
         self.learning_started = False  # Add a flag to track learning state
@@ -46,12 +46,26 @@ class GateSynthesisCallbacks(DefaultCallbacks):
         if env.is_fidelity_consistent(threshold=self.target_fidelity, steps=self.check_steps):
             print(f"Gate {env.U_target_key}: Fidelity consistent! Moving to next gate.")
             env.next_environment()
-            # Increase exploration for the next 1000 timesteps (adjust as needed)
-            target_timestep = env.timesteps_total + 5000  # Adjust exploration duration
+            # # Increase exploration for the next 1000 timesteps (adjust as needed)
+            # target_timestep = env.timesteps_total + 5000  # Adjust exploration duration
             
             
-            # Update the exploration configuration to continue exploration
-            worker.policy_map["default_policy"].config["exploration_config"]["scale_timesteps"] = target_timestep
+            # # Increase exploration when switching gates
+            # policy = worker.get_policy("default_policy")
+            # policy.exploration.reset_noise(scale=1.0)  # Full exploration on gate switch
+
+
+            
+            # # Access the policy and update exploration explicitly
+            # policy = worker.get_policy("default_policy")
+
+            # # Adjust exploration behavior
+            # target_timestep = env.timesteps_total + 5000  # Adjust exploration duration
+            # policy.num_steps_sampled_before_learning_starts = target_timestep
+            # #policy.exploration.scale_timestamp = 2500
+
+            # (Optional) Reset policy's internal exploration object if needed
+            #policy.exploration.reset()  # Reset to apply new exploration parameters
 
             # # Optionally, freeze critic temporarily
             # self.training_on_new_gate = True

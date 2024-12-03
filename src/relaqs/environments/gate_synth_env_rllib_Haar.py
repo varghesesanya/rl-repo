@@ -389,9 +389,24 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         # Check if the fidelity history consistently meets or exceeds the threshold
         if len(self.fidelity_history) < steps:
             return False
+    
+        recent_fidelities = self.fidelity_history[-steps:]
+                
+        # # Calculate the average fidelity of values above the threshold
+        # above_threshold = [f for f in recent_fidelities if f >= threshold]
+        # if not above_threshold:  # No values meet the threshold
+        #     return False
+
+        # average_fidelity = sum(above_threshold) / len(above_threshold)
+
+        # # Check if the average fidelity meets the threshold
+        # return average_fidelity >= threshold
+        if len(self.fidelity_history) < steps:
+            return False
         
         recent_fidelities = self.fidelity_history[-steps:]
         return all(f >= threshold for f in recent_fidelities)
+
     
     def next_environment(self):
         print(f"Gate switch occurred at timestep {self.timesteps_total}.")

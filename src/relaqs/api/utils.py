@@ -9,6 +9,7 @@ from ray.rllib.algorithms.algorithm import Algorithm
 from ray.rllib.algorithms.ddpg import DDPGConfig
 from relaqs import RESULTS_DIR
 from relaqs.api import gates
+from relaqs.api.exploration import CustomExploration
 from relaqs.quantum_noise_data.get_data import (get_month_of_all_qubit_data, get_single_qubit_detuning)
 from relaqs.api.callbacks import GateSynthesisCallbacks
 from relaqs import QUANTUM_NOISE_DATA_DIR
@@ -299,7 +300,10 @@ def run_multigate_training(env_class, gate, n_training_iterations=1, noise_file=
     env_config["observation_space_size"] = 40
     env_config["verbose"] = True
 
+    # Initialize algorithm configuration
     alg_config = DDPGConfig()
+
+    # Set framework and basic settings
     alg_config.framework("torch")
     alg_config.rollouts(batch_mode="complete_episodes")
     alg_config.callbacks(GateSynthesisCallbacks)
@@ -314,16 +318,26 @@ def run_multigate_training(env_class, gate, n_training_iterations=1, noise_file=
     alg_config.actor_hiddens = [30, 30, 30]
     alg_config.exploration_config["scale_timesteps"] = 5000
 
-    # Build the algorithm once
-    alg_config.environment(env_class, env_config=env_config)
-    alg = alg_config.build()
 
+    # Add custom exploration logic
+    alg_config.exploration_config = {
+        "type": CustomExploration,  # Reference your custom exploration class
+        "initial_noise_scale": 1.0,  # Initial noise scale for exploration
+        "noise_decay": 0.99,        # Decay rate for noise
+        "scale_timesteps": 10000,   # Timesteps for scaling exploration
+    }
+
+    # Set up the environment
+    alg_config.environment(env_class, env_config=env_config)
+
+    # Build the algorithm
+    alg = alg_config.build()
 
     gate_results = []
     for i in range(n_training_iterations):
         result = alg.train()   
         gate_results.append(result['hist_stats'])
-
+        print("Algorithm Configuration Exploration TimeStep Now :: {} Number of Steps before learning starts {}", alg_config.exploration_config["scale_timesteps"], alg_config.num_steps_sampled_before_learning_starts)
         save_result = alg.save(path_to_save_checkpoints)
         path_to_checkpoint = save_result.checkpoint.path
 
