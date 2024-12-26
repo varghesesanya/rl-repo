@@ -45,12 +45,11 @@ class GateSynthesisCallbacks(DefaultCallbacks):
         # Use the normalized threshold
         if env.is_fidelity_consistent(threshold=self.target_fidelity, steps=self.check_steps):
             print(f"Gate {env.U_target_key}: Fidelity consistent! Moving to next gate.")
-            env.next_environment()
-            # # Increase exploration for the next 1000 timesteps (adjust as needed)
+            env.next_environment()            # # Increase exploration for the next 1000 timesteps (adjust as needed)
             # target_timestep = env.timesteps_total + 5000  # Adjust exploration duration
             
             
-            # # Increase exploration when switching gates
+            # Increase exploration when switching gates
             # policy = worker.get_policy("default_policy")
             # policy.exploration.reset_noise(scale=1.0)  # Full exploration on gate switch
 

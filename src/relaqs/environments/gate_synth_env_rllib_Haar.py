@@ -255,7 +255,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
 
     def __init__(self, env_config):
         self.final_time = env_config["final_time"]  # Final time for the gates
-        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(env_config["observation_space_size"],), dtype=np.float32)
+        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(env_config["observation_space_size"],), dtype=np.float32)
         # self.action_space = gym.spaces.Box(low=np.array([-1, -1, -1]), high=np.array([1, 1, 1])) # for detuning included control
         self.action_space = gym.spaces.Box(low=np.array([-1, -1]), high=np.array([1, 1]))
 #        self.delta = [env_config["delta"]]  # detuning
@@ -287,7 +287,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         self.gate_to_index = {"X": 0, "Y":1, "Z": 2, "H": 3}
         self.embedding_dim = 4
         self.embedding_layer = nn.Embedding(num_embeddings=len(self.gate_to_index), embedding_dim=self.embedding_dim)
-        self.max_episode_steps = 4  
+        self.gate_switch_timesteps = []
         
         # Initialize in your environment
         self.fidelity_history = []
@@ -317,48 +317,51 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         return sampled_rate_list
             
     def get_observation(self):
-        # Fidelity normalization: Logarithmic scaling to [-1, 1]
-        fidelity = self.compute_fidelity()
-        fidelity_log = -np.log10(1 - fidelity + 1e-15) if fidelity < 1 else 10
-        fidelity_normalized = 2 * (fidelity_log / 10) - 1  # Map [0, 10] to [-1, 1]
-        fidelity_normalized = np.clip(fidelity_normalized, -1, 1)
 
-        # Normalize relaxation rates to [-1, 1]
-        normalized_relaxation_rate = 2 * (
-            (self.relaxation_rate - np.min(self.relaxation_rate)) /
-            (np.ptp(self.relaxation_rate) + 1e-15)
-        ) - 1
 
-        # Normalize detuning to [-1, 1]
-        normalized_detuning = 2 * (
-            (self.detuning - min(self.delta)) /
-            (max(self.delta) - min(self.delta) + 1e-15)
-        ) - 1
-
-        # Normalize unitary elements to [-1, 1]
-        unitary_observation = self.unitary_to_observation(self.U)
-        unitary_observation_normalized = 2 * (
-            (unitary_observation - np.min(unitary_observation)) /
-            (np.ptp(unitary_observation) + 1e-15)
-        ) - 1
-
-        # Gate embedding normalization
+        # # Gate embedding normalization
         gate_index = self.gate_to_index[self.U_target_key]
-        gate_embedding = self.embedding_layer(torch.tensor(gate_index)).detach().numpy()
-        gate_embedding_normalized = np.tanh(gate_embedding)  # Scale embedding to [-1, 1]
+        # gate_embedding = self.embedding_layer(torch.tensor(gate_index)).detach().numpy()
+        # gate_embedding_normalized = np.tanh(gate_embedding)  # Scale embedding to [-1, 1]
 
-        # Combine all components into a single observation
-        observation = np.concatenate(
-            [
-                [fidelity_normalized],  # Fidelity in [-1, 1]
-                normalized_relaxation_rate,  # Relaxation rates in [-1, 1]
-                [normalized_detuning],  # Detuning in [-1, 1]
-                unitary_observation_normalized,  # Unitary elements in [-1, 1]
-                gate_embedding_normalized,  # Gate embedding in [-1, 1]
-            ]
-        ).astype(np.float32)
 
-        return np.clip(observation, -1, 1)  # Ensure all values are in [-1, 1]
+        # Generate a one-hot vector
+        gate_one_hot = np.zeros(len(self.gate_to_index))
+        gate_one_hot[gate_index] = 1
+    
+        
+        normalizedDetuning = [(self.detuning - min(self.delta)+1E-15)/(max(self.delta)-min(self.delta)+1E-15)]
+        
+
+        # Compute components and ensure they're NumPy arrays
+        fidelity = np.array([self.compute_fidelity()])
+        relaxation_rate_scaled = np.array([x // 6283185 for x in self.relaxation_rate])  # Ensure this is an array
+        normalized_detuning = np.array(normalizedDetuning)  # Ensure normalizedDetuning is an array
+        unitary_observation = np.array(self.unitary_to_observation(self.U))  # Convert to NumPy array
+        gate_one_hot = np.array(gate_one_hot)  # Ensure it's a NumPy array
+
+        # Concatenate all arrays along the first axis
+        result = np.concatenate(
+            [fidelity, relaxation_rate_scaled, normalized_detuning, unitary_observation, gate_one_hot]
+        )
+
+        return result
+        
+        return np.append([self.compute_fidelity()]+[x//6283185 for x in self.relaxation_rate]+normalizedDetuning, self.unitary_to_observation(self.U), gate_one_hot) #6283185 assuming 500 nanosecond relaxation is max
+    
+        
+        # # Combine all components into a single observation
+        # observation = np.concatenate(
+        #     [
+        #         [fidelity_normalized],  # Fidelity in [-1, 1]
+        #         normalized_relaxation_rate,  # Relaxation rates in [-1, 1]
+        #         [normalized_detuning],  # Detuning in [-1, 1]
+        #         unitary_observation_normalized,  # Unitary elements in [-1, 1]
+        #         gate_one_hot,  # Gate embedding in [-1, 1]
+        #     ]
+        # ).astype(np.float32)
+
+        # return np.clip(observation, -1, 1)  # Ensure all values are in [-1, 1]
 
 
 
@@ -396,16 +399,13 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         # above_threshold = [f for f in recent_fidelities if f >= threshold]
         # if not above_threshold:  # No values meet the threshold
         #     return False
-
-        # average_fidelity = sum(above_threshold) / len(above_threshold)
-
-        # # Check if the average fidelity meets the threshold
-        # return average_fidelity >= threshold
-        if len(self.fidelity_history) < steps:
-            return False
         
         recent_fidelities = self.fidelity_history[-steps:]
-        return all(f >= threshold for f in recent_fidelities)
+        if all(f >= threshold for f in recent_fidelities):
+            print("Gate switch logic fidelity values:", recent_fidelities)
+            return True
+        return False
+
 
     
     def next_environment(self):
@@ -417,7 +417,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         # Update target unitary and its key
         self.U_target = self.unitary_to_superoperator(next_gate.get_matrix())
         self.U_target_key = next_gate.__str__()
-        
+        self.gate_switch_timesteps.append(self.timesteps_total)
         # Reset environment
         self.reset()
 

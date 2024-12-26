@@ -14,7 +14,7 @@ n_episodes_for_inferencing = 10
 save_training = True
 save_inference = True
 plot = True
-figure_title_training = "Training with Target Gate X"
+figure_title_training = "Training with Target Gate X, Y, Z and H gate"
 figure_title_inference = "Inferencing with Target Gate Y"
 n_training_iterations = 10
 path_to_save_checkpoints = "/Users/sanyavarghese/rl-repo/src/policies/checkpoints/new_gate"
@@ -51,30 +51,30 @@ if save_training is True:
 
 # ------------------> Inferencing on New Gate <------------------------
 # Configure the new target gate for inferencing
-new_target_gate = gates.Y() 
-inferenced_env = do_inferencing_new_gate(env,
-    trained_alg,
-    n_episodes_for_inferencing,
-    quantum_noise_file_path=inferencing_noise_file,
-    new_gate=new_target_gate
-)
+# new_target_gate = gates.Y() 
+# inferenced_env = do_inferencing_new_gate(env,
+#     trained_alg,
+#     n_episodes_for_inferencing,
+#     quantum_noise_file_path=inferencing_noise_file,
+#     new_gate=new_target_gate
+# )
 
 
 
-# ------------------> Save Inferencing Results <------------------------
-if save_inference:
-    sr = SaveResults(inferenced_env, trained_alg)
-    save_dir_inference = sr.save_results("inference")
-    print("Inferencing results saved to:", save_dir_inference)
+# # ------------------> Save Inferencing Results <------------------------
+# if save_inference:
+#     sr = SaveResults(inferenced_env, trained_alg)
+#     save_dir_inference = sr.save_results("inference")
+#     print("Inferencing results saved to:", save_dir_inference)
     
-    if plot:
-        plot_data(
-        save_dir_inference,
-        episode_length=trained_alg._episode_history[0].episode_length,
-        figure_title=figure_title_inference,
-        env_data_path="env_data_inference.csv"
-        )
-        print("Inference plots created.")
+#     if plot:
+#         plot_data(
+#         save_dir_inference,
+#         episode_length=trained_alg._episode_history[0].episode_length,
+#         figure_title=figure_title_inference,
+#         env_data_path="env_data_inference.csv"
+#         )
+#         print("Inference plots created.")
 
 # Define the gate names and save path
 training_gate_name = "X, Y, Z and H Gates"
