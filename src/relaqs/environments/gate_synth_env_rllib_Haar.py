@@ -6,7 +6,8 @@ import random
 from qutip.superoperator import liouvillian, spre, spost
 from qutip import Qobj, tensor
 from qutip.operators import *
-from qutip import cnot, cphase
+from qutip import cphase
+from qutip.qip.operations import cnot
 from relaqs.api import gates
 import torch
 import torch.nn as nn
@@ -195,8 +196,8 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
     @classmethod
     def get_default_env_config(cls):
         return {
-            # "action_space_size": 3,
-            "action_space_size": 2,
+            "action_space_size": 3,
+            #"action_space_size": 2,
             "U_initial": I,  # staring with I
             "U_target": X,  # target for X
             "final_time": 35.5556E-9, # in seconds
@@ -214,8 +215,8 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         }
     def get_env_config_multigate(cls, target_gate=None):
         return {
-            # "action_space_size": 3,
-            "action_space_size": 2,
+            "action_space_size": 3,
+            #"action_space_size": 2,
             "U_initial": I,  # staring with I
             "U_target": target_gate.get_matrix(),
             "U_target_key":target_gate.__str__(),
@@ -235,8 +236,8 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         
     def get_new_inference_gate_env_config(target_gate):
         return {
-            # "action_space_size": 3,
-            "action_space_size": 2,
+            "action_space_size": 3,
+            #"action_space_size": 2,
             "U_initial": I,  # staring with I
             "U_target": target_gate.get_matrix(),  # target for Y
             "U_target_key":target_gate.__str__(),
@@ -257,7 +258,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         self.final_time = env_config["final_time"]  # Final time for the gates
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=(env_config["observation_space_size"],), dtype=np.float32)
         # self.action_space = gym.spaces.Box(low=np.array([-1, -1, -1]), high=np.array([1, 1, 1])) # for detuning included control
-        self.action_space = gym.spaces.Box(low=np.array([-1, -1]), high=np.array([1, 1]))
+        self.action_space = gym.spaces.Box(low=np.array([-1, -1, -1]), high=np.array([1, 1, 1]))
 #        self.delta = [env_config["delta"]]  # detuning
         self.delta = env_config["delta"]  # detuning
         self.detuning = 0
@@ -282,11 +283,10 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         self.prev_fidelity = 0  # previous step' fidelity for rewarding
         self.gamma_phase_max = 1.1675 * np.pi
         self.gamma_magnitude_max = 1.8 * np.pi / self.final_time / self.steps_per_Haar
+        self.gamma_detuning_max = 0.05E9      #detuning of the control pulse in Hz 
         self.transition_history = []
         self.episode_id = None
         self.gate_to_index = {"X": 0, "Y":1, "Z": 2, "H": 3}
-        self.embedding_dim = 4
-        self.embedding_layer = nn.Embedding(num_embeddings=len(self.gate_to_index), embedding_dim=self.embedding_dim)
         self.gate_switch_timesteps = []
         
         # Initialize in your environment
@@ -321,9 +321,6 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
 
         # # Gate embedding normalization
         gate_index = self.gate_to_index[self.U_target_key]
-        # gate_embedding = self.embedding_layer(torch.tensor(gate_index)).detach().numpy()
-        # gate_embedding_normalized = np.tanh(gate_embedding)  # Scale embedding to [-1, 1]
-
 
         # Generate a one-hot vector
         gate_one_hot = np.zeros(len(self.gate_to_index))
@@ -333,38 +330,18 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         normalizedDetuning = [(self.detuning - min(self.delta)+1E-15)/(max(self.delta)-min(self.delta)+1E-15)]
         
 
-        # Compute components and ensure they're NumPy arrays
+        # Compute components and concatenate
         fidelity = np.array([self.compute_fidelity()])
-        relaxation_rate_scaled = np.array([x // 6283185 for x in self.relaxation_rate])  # Ensure this is an array
-        normalized_detuning = np.array(normalizedDetuning)  # Ensure normalizedDetuning is an array
-        unitary_observation = np.array(self.unitary_to_observation(self.U))  # Convert to NumPy array
-        gate_one_hot = np.array(gate_one_hot)  # Ensure it's a NumPy array
-
+        relaxation_rate_scaled = np.array([x // 6283185 for x in self.relaxation_rate])
+        normalized_detuning = np.array(normalizedDetuning)
+        unitary_observation = np.array(self.unitary_to_observation(self.U)) 
+        gate_one_hot = np.array(gate_one_hot) 
         # Concatenate all arrays along the first axis
         result = np.concatenate(
             [fidelity, relaxation_rate_scaled, normalized_detuning, unitary_observation, gate_one_hot]
         )
-
         return result
         
-        return np.append([self.compute_fidelity()]+[x//6283185 for x in self.relaxation_rate]+normalizedDetuning, self.unitary_to_observation(self.U), gate_one_hot) #6283185 assuming 500 nanosecond relaxation is max
-    
-        
-        # # Combine all components into a single observation
-        # observation = np.concatenate(
-        #     [
-        #         [fidelity_normalized],  # Fidelity in [-1, 1]
-        #         normalized_relaxation_rate,  # Relaxation rates in [-1, 1]
-        #         [normalized_detuning],  # Detuning in [-1, 1]
-        #         unitary_observation_normalized,  # Unitary elements in [-1, 1]
-        #         gate_one_hot,  # Gate embedding in [-1, 1]
-        #     ]
-        # ).astype(np.float32)
-
-        # return np.clip(observation, -1, 1)  # Ensure all values are in [-1, 1]
-
-
-
     
     def compute_fidelity(self):
         # Convert the target unitary to Liouville space
@@ -445,7 +422,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         num_time_bins = 2 ** (self.current_Haar_num - 1) # Haar number decides the number of time bins
 
         # action space setting
-        alpha = 0  # in current simulation we do not adjust the detuning
+        alpha = 0.05E9*action[2] 
 
         # gamma is the complex amplitude of the control field
         gamma_magnitude = self.gamma_magnitude_max / 2 * (action[0] + 1)
@@ -504,7 +481,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
             )
         # Tracking Fidelity 
         self.fidelity_history.append(fidelity)
-        if len(self.fidelity_history) > 25:  # Keep only the last 10 fidelities
+        if len(self.fidelity_history) > 10:  # Keep only the last 10 fidelities
             self.fidelity_history.pop(0)
             
         self.transition_history.append([fidelity, reward, action.tolist(), self.U.flatten(), self.episode_id])

@@ -133,7 +133,8 @@ def do_inferencing_new_gate(env, alg, n_episodes_for_inferencing, quantum_noise_
     #  Create a new environment specifically for inference
     inference_env_config = GateSynthEnvRLlibHaarNoisy.get_new_inference_gate_env_config(new_gate)
     inference_env_config["U_target"] = new_gate.get_matrix()
-    inference_env_config["observation_space_size"] = 36
+    # How did inference env not have all 40 attributes? why is it trhriving on the 36??
+    inference_env_config["observation_space_size"] = 36 
     
     t1_list, t2_list, detuning_list = sample_noise_parameters(quantum_noise_file_path)
 

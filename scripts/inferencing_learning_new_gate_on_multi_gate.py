@@ -16,7 +16,7 @@ save_inference = True
 plot = True
 figure_title_training = "Training with Target Gate X, Y, Z and H gate"
 figure_title_inference = "Inferencing with Target Gate Y"
-n_training_iterations = 10
+n_training_iterations = 50
 path_to_save_checkpoints = "/Users/sanyavarghese/rl-repo/src/policies/checkpoints/new_gate"
 multi_gate_training_list = [gates.X(), gates.Y(), gates.Z(), gates.H()]
 

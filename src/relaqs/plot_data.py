@@ -53,108 +53,109 @@ def plot_results(save_dir, figure_title=""):
     plt.savefig(save_dir + "gradient_and_q_values.png")
 
 
-# def plot_data(save_dir, episode_length, figure_title='', env_data_path=''):
-#     """ Currently works for constant episode_length """
-#     #---------------------- Getting data from files  <--------------------------------------
-#     df = pd.read_csv(save_dir + env_data_path, header=0)
-#     fidelities = np.array(df.iloc[:,0])
-#     rewards = np.array(df.iloc[:,1])
-#     episode_ids = np.array(df.iloc[:,4])
-#     gate_switch_steps = np.where(df['Gate Switch'] == 1)[0]  # Indices of gate switches
+def plot_data(save_dir, episode_length, figure_title='', env_data_path=''):
+    """ Currently works for constant episode_length """
+    #---------------------- Getting data from files  <--------------------------------------
+    df = pd.read_csv(save_dir + env_data_path, header=0)
+    fidelities = np.array(df.iloc[:,0])
+    rewards = np.array(df.iloc[:,1])
+    episode_ids = np.array(df.iloc[:,4])
+    gate_switch_steps = np.where(df['Gate Switch'] == 1)[0]//2  # Indices of gate switches
 
-#     print("max fidelity: ", max(fidelities))
-#     print("max reward: ", max(rewards))
+    print("max fidelity: ", max(fidelities))
+    print("max reward: ", max(rewards))
 
-#     # --------> Get fidelity, infidelity, and reward from the last step of the episode <--------
-#     final_fidelity_per_episode = []
-#     final_infelity_per_episode = []
-#     sum_of_rewards_per_episode = []
+    # --------> Get fidelity, infidelity, and reward from the last step of the episode <--------
+    final_fidelity_per_episode = []
+    final_infelity_per_episode = []
+    sum_of_rewards_per_episode = []
 
-#     current_episode_id = episode_ids[0]
-#     current_fidelity = fidelities[0]
-#     current_reward_sum = rewards[0]
-#     for i in range(len(episode_ids)):
-#         if (episode_ids[i] != current_episode_id) or (i == len(episode_ids) - 1):
-#             final_fidelity_per_episode.append(current_fidelity)
-#             final_infelity_per_episode.append(1 - current_fidelity)
-#             sum_of_rewards_per_episode.append(current_reward_sum)
-#             current_reward_sum = 0
-#         current_episode_id = episode_ids[i]
-#         current_fidelity = fidelities[i]
-#         current_reward_sum += rewards[i]
-#     # ------------------------------------------------------------------------------------------
+    current_episode_id = episode_ids[0]
+    current_fidelity = fidelities[0]
+    current_reward_sum = rewards[0]
+    for i in range(len(episode_ids)):
+        if (episode_ids[i] != current_episode_id) or (i == len(episode_ids) - 1):
+            final_fidelity_per_episode.append(current_fidelity)
+            final_infelity_per_episode.append(1 - current_fidelity)
+            sum_of_rewards_per_episode.append(current_reward_sum)
+            current_reward_sum = 0
+        current_episode_id = episode_ids[i]
+        current_fidelity = fidelities[i]
+        current_reward_sum += rewards[i]
+    # ------------------------------------------------------------------------------------------
 
-#     # ----------------------> Moving average <--------------------------------------
-#     # Fidelity
-#     rolling_average_window = 1
-#     avg_final_fidelity_per_episode = []
-#     avg_final_infelity_per_episode = []
-#     avg_sum_of_rewards_per_episode = []
-#     for i in range (len(final_fidelity_per_episode)):
-#         start = i - rolling_average_window if (i - rolling_average_window) > 0 else 0
-#         avg_final_fidelity_per_episode.append(np.mean(final_fidelity_per_episode[start: i + 1]))
-#         avg_final_infelity_per_episode.append(np.mean(final_infelity_per_episode[start: i + 1]))
-#         avg_sum_of_rewards_per_episode.append(np.mean(sum_of_rewards_per_episode[start: i + 1]))
+    # ----------------------> Moving average <--------------------------------------
+    # Fidelity
+    rolling_average_window = 10
+    avg_final_fidelity_per_episode = []
+    avg_final_infelity_per_episode = []
+    avg_sum_of_rewards_per_episode = []
+    for i in range (len(final_fidelity_per_episode)):
+        start = i - rolling_average_window if (i - rolling_average_window) > 0 else 0
+        avg_final_fidelity_per_episode.append(np.mean(final_fidelity_per_episode[start: i + 1]))
+        avg_final_infelity_per_episode.append(np.mean(final_infelity_per_episode[start: i + 1]))
+        avg_sum_of_rewards_per_episode.append(np.mean(sum_of_rewards_per_episode[start: i + 1]))
 
-#     # Round averages to prevent numerical error when plotting
-#     rounding_precision = 6
-#     avg_final_fidelity_per_episode = np.round(avg_final_fidelity_per_episode, rounding_precision)
-#     avg_final_infelity_per_episode = np.round(avg_final_infelity_per_episode, rounding_precision)
-#     avg_sum_of_rewards_per_episode = np.round(avg_sum_of_rewards_per_episode, rounding_precision)
+    # Round averages to prevent numerical error when plotting
+    rounding_precision = 6
+    avg_final_fidelity_per_episode = np.round(avg_final_fidelity_per_episode, rounding_precision)
+    avg_final_infelity_per_episode = np.round(avg_final_infelity_per_episode, rounding_precision)
+    avg_sum_of_rewards_per_episode = np.round(avg_sum_of_rewards_per_episode, rounding_precision)
 
 
-#     if len(avg_final_fidelity_per_episode) >= 100: 
-#         print("Average final fidelity over last 100 episodes", np.mean(avg_final_fidelity_per_episode[-100:]))
+    if len(avg_final_fidelity_per_episode) >= 100: 
+        print("Average final fidelity over last 100 episodes", np.mean(avg_final_fidelity_per_episode[-100:]))
 
-#     # -------------------------------> Plotting <-------------------------------------
-#     rcParams['font.family'] = 'serif'
-#     mpl.style.use('seaborn-v0_8')
+    # -------------------------------> Plotting <-------------------------------------
+    rcParams['font.family'] = 'serif'
+    mpl.style.use('seaborn-v0_8')
 
-#     fig,(ax1, ax2, ax3) = plt.subplots(1, 3)
-#     fig.suptitle(figure_title)
-#     fig.set_size_inches(10, 5)
+    fig,(ax1, ax2, ax3) = plt.subplots(1, 3)
+    fig.suptitle(figure_title)
+    fig.set_size_inches(10, 5)
 
-#     # ----> fidelity <----
-#     ax1.plot(final_fidelity_per_episode, color="b")
-#     ax1.plot(avg_final_fidelity_per_episode, color="k")
-#     ax1.set_title("Fidelity")
-#     ax1.set_title("a)", loc='left', fontsize='medium')
-#     ax1.set_xlabel("Episodes")
+    # ----> fidelity <----
+    ax1.plot(final_fidelity_per_episode, color="b")
+    ax1.plot(avg_final_fidelity_per_episode, color="k")
+    ax1.set_title("Fidelity")
+    ax1.set_title("a)", loc='left', fontsize='medium')
+    ax1.set_xlabel("Episodes")
     
-#      # Add vertical lines for gate switches
-#     for step in gate_switch_steps:
-#         ax1.axvline(x=step, color='orange', linestyle='--', label='Gate Switch' if step == gate_switch_steps[0] else "")
+     # Add vertical lines for gate switches
+    for step in gate_switch_steps:
+        ax1.axvline(x=step, color='orange', linestyle='--', label='Gate Switch' if step == gate_switch_steps[0] else "")
 
-#     # ----> infidelity <----
-#     ax2.plot(final_infelity_per_episode, color="r")
-#     ax2.plot(avg_final_infelity_per_episode, color="k")
-#     ax2.set_yscale("log")
-#     ax2.set_title("1 - Fidelity (log scale)")
-#     ax2.set_title("b)", loc='left', fontsize='medium')
-#     ax2.set_xlabel("Episodes")
+    # ----> infidelity <----
+    ax2.plot(final_infelity_per_episode, color="r")
+    ax2.plot(avg_final_infelity_per_episode, color="k")
+    ax2.set_yscale("log")
+    ax2.set_title("1 - Fidelity (log scale)")
+    ax2.set_title("b)", loc='left', fontsize='medium')
+    ax2.set_xlabel("Episodes")
 
-#     # ----> reward <----
-#     ax3.plot(sum_of_rewards_per_episode, color="g")
-#     ax3.plot(avg_sum_of_rewards_per_episode, color="k")
-#     ax3.set_title("Sum of Rewards")
-#     ax3.set_title("c)", loc='left', fontsize='medium')
-#     ax3.set_xlabel("Episodes")
+    # ----> reward <----
+    ax3.plot(sum_of_rewards_per_episode, color="g")
+    ax3.plot(avg_sum_of_rewards_per_episode, color="k")
+    ax3.set_title("Sum of Rewards")
+    ax3.set_title("c)", loc='left', fontsize='medium')
+    ax3.set_xlabel("Episodes")
     
-#     plt.tight_layout()
-#     plt.savefig(save_dir + "plot.png")
+    plt.tight_layout()
+    plt.savefig(save_dir + "plot.png")
 
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 
-def plot_data(save_dir, episode_length, figure_title='', env_data_path=''):
+def plot_data_using_plotly(save_dir, episode_length, figure_title='', env_data_path=''):
     """Visualize all data points using Plotly."""
     # ---------------------- Getting data from files ----------------------
     df = pd.read_csv(save_dir + env_data_path, header=0)
+    print("Length of the dataframe::{}", len(df))
     fidelities = np.array(df.iloc[:, 0])
     rewards = np.array(df.iloc[:, 1])
     episode_ids = np.array(df.iloc[:, 4])
-    gate_switch_steps = np.where(df['Gate Switch'] == 1)[0]  # Indices of gate switches
+    gate_switch_steps = np.where(df['Gate Switch'] == 1)[0]//2  # Indices of gate switches
 
     print("Max fidelity:", max(fidelities))
     print("Max reward:", max(rewards))
