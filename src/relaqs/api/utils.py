@@ -319,7 +319,7 @@ def run_multigate_training(env_class, gate, n_training_iterations=1, noise_file=
     # Learning Parameters
     alg_config.actor_lr = 5e-4  # Slightly lower than current 1e-3
     alg_config.critic_lr = 1e-4  # Lower critic learning rate for stability
-    alg_config.num_steps_sampled_before_learning_starts = 5000  # 2,000 is fine for a 30,000 run, plus we add noise consistently
+    alg_config.num_steps_sampled_before_learning_starts = 10000  # 2,000 is fine for a 30,000 run, plus we add noise consistently
     alg_config.twin_q = True  # Enable twin Q-learning for better stability
     alg_config.smooth_target_policy = True
 
