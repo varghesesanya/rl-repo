@@ -298,7 +298,7 @@ def run_multigate_training(env_class, gate, n_training_iterations=1, noise_file=
     env_config["relaxation_rates_list"] = [np.reciprocal(t1_list).tolist(), np.reciprocal(t2_list).tolist()]
     env_config["detuning_list"] = detuning_list
     env_config["relaxation_ops"] = [sigmam(), sigmaz()]
-    env_config["observation_space_size"] = 40
+    env_config["observation_space_size"] = 68
     env_config["verbose"] = True
 
     # Initialize algorithm configuration
@@ -310,14 +310,43 @@ def run_multigate_training(env_class, gate, n_training_iterations=1, noise_file=
     alg_config.callbacks(GateSynthesisCallbacks)
     alg_config.train_batch_size = env_class.get_default_env_config()["steps_per_Haar"]
 
-    # Configure network architecture and hyperparameters
-    alg_config.actor_lr = 1e-3
-    alg_config.critic_lr = 1e-3
-    alg_config.actor_hidden_activation = "relu"
+    # Network Architecture 
+    alg_config.actor_hiddens = [256, 128, 64]  # Instead of [30, 30, 30]
+    alg_config.critic_hiddens = [256, 128, 64]  
+    alg_config.actor_hidden_activation = "relu" 
     alg_config.critic_hidden_activation = "relu"
-    alg_config.num_steps_sampled_before_learning_starts = 1000
-    alg_config.actor_hiddens = [30, 30, 30]
-    alg_config.exploration_config["scale_timesteps"] = 10000
+
+    # Learning Parameters
+    alg_config.actor_lr = 5e-4  # Slightly lower than current 1e-3
+    alg_config.critic_lr = 1e-4  # Lower critic learning rate for stability
+    alg_config.num_steps_sampled_before_learning_starts = 5000  # 2,000 is fine for a 30,000 run, plus we add noise consistently
+    alg_config.twin_q = True  # Enable twin Q-learning for better stability
+    alg_config.smooth_target_policy = True
+
+    # Exploration settings
+    alg_config.exploration_config.update({
+        "type": "OrnsteinUhlenbeckNoise",
+        "initial_scale": 1.0,
+        "final_scale": 0.02,
+        "scale_timesteps": 20000,
+        "ou_sigma": 0.3,  # Increased noise
+        "ou_theta": 0.15
+    })
+    # Adding evaluation settings to the config
+    alg_config.evaluation_interval = 5000  # Evaluate every 5000 steps
+    alg_config.evaluation_duration = 10    # Run 10 episodes per evaluation
+    alg_config.evaluation_config = {
+        "explore": False  # Disable exploration during evaluation
+    }
+    
+    # Add experience replay prioritization
+    alg_config.replay_buffer_config.update({
+        "type": "MultiAgentPrioritizedReplayBuffer",
+        "capacity": 500000,
+        "prioritized_replay_alpha": 0.6,
+        "prioritized_replay_beta": 0.4,
+        "prioritized_replay_eps": 1e-6
+    })
 
 
     # # Add custom exploration logic

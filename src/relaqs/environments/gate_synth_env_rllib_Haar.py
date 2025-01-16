@@ -11,6 +11,8 @@ from qutip.qip.operations import cnot
 from relaqs.api import gates
 import torch
 import torch.nn as nn
+
+from relaqs.api.utils import normalize
 #from relaqs.api.reward_functions import negative_matrix_difference_norm
 
 sig_p = np.array([[0, 1], [0, 0]])
@@ -211,7 +213,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
             "relaxation_rates_list": [[314159]], # relaxation lists of list of floats to be sampled from when resetting environment. (10 usec)
             "relaxation_ops": [sigmam()], #relaxation operator lists for T1 and T2, respectively
 #            "observation_space_size": 35, # 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 2 for relaxation rate
-            "observation_space_size": 40# 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
+            "observation_space_size": 68# 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
         }
     def get_env_config_multigate(cls, target_gate=None):
         return {
@@ -231,7 +233,7 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
             "relaxation_rates_list": [[314159]], # relaxation lists of list of floats to be sampled from when resetting environment. (10 usec)
             "relaxation_ops": [sigmam()], #relaxation operator lists for T1 and T2, respectively
 #            "observation_space_size": 35, # 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 2 for relaxation rate
-            "observation_space_size": 40# 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
+            "observation_space_size": 68# 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
         }
         
     def get_new_inference_gate_env_config(target_gate):
@@ -251,12 +253,13 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
 #            "relaxation_ops": [sigmam(),sigmaz()] #relaxation operator lists for T1 and T2, respectively
             "relaxation_rates_list": [[314159]], # relaxation lists of list of floats to be sampled from when resetting environment. (10 usec)
             "relaxation_ops": [sigmam()], #relaxation operator lists for T1 and T2, respectively
-            "observation_space_size": 40# 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
+            "observation_space_size": 68# 2*16 = (complex number)*(density matrix elements = 4)^2, + 1 for fidelity + 1 for relaxation rate + 1 for detuning
         }
 
     def __init__(self, env_config):
         self.final_time = env_config["final_time"]  # Final time for the gates
-        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(env_config["observation_space_size"],), dtype=np.float32)
+        self.detuning_list = env_config["detuning_list"]
+        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(env_config["observation_space_size"],), dtype=np.float32)
         # self.action_space = gym.spaces.Box(low=np.array([-1, -1, -1]), high=np.array([1, 1, 1])) # for detuning included control
         self.action_space = gym.spaces.Box(low=np.array([-1, -1, -1]), high=np.array([1, 1, 1]))
 #        self.delta = [env_config["delta"]]  # detuning
@@ -294,6 +297,9 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         self.multi_gate_training_list = [gates.X(), gates.Y(), gates.Z(), gates.H()]
         self.current_target_gate_pointer = 0
         self.timesteps_total = 0  # Tracks the total number of timesteps across all episodes
+        
+        self.steps_since_gate_switch = 0  # Add this to track steps since last switch
+
 
     def detuning_update(self):
         # Random detuning selection
@@ -317,34 +323,20 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         return sampled_rate_list
             
     def get_observation(self):
+        normalized_detuning = [normalize(self.detuning, self.detuning_list)]
+        normalized_relaxation_rates = [normalize(self.relaxation_rate[0], self.relaxation_rates_list[0]),
+                                       normalize(self.relaxation_rate[1], self.relaxation_rates_list[1])] # could do list comprehension
 
+        interm_array = np.append([self.compute_fidelity()] +
+                         normalized_relaxation_rates +
+                         normalized_detuning,
+                         self.unitary_to_observation(self.U))
 
-        # # Gate embedding normalization
-        gate_index = self.gate_to_index[self.U_target_key]
-
-        # Generate a one-hot vector
-        gate_one_hot = np.zeros(len(self.gate_to_index))
-        gate_one_hot[gate_index] = 1
-    
-        
-        normalizedDetuning = [(self.detuning - min(self.delta)+1E-15)/(max(self.delta)-min(self.delta)+1E-15)]
-        
-
-        # Compute components and concatenate
-        fidelity = np.array([self.compute_fidelity()])
-        relaxation_rate_scaled = np.array([x // 6283185 for x in self.relaxation_rate])
-        normalized_detuning = np.array(normalizedDetuning)
-        unitary_observation = np.array(self.unitary_to_observation(self.U)) 
-        gate_one_hot = np.array(gate_one_hot) 
-        # Concatenate all arrays along the first axis
-        result = np.concatenate(
-            [fidelity, relaxation_rate_scaled, normalized_detuning, unitary_observation, gate_one_hot]
-        )
-        return result
+        return np.append(interm_array, self.unitary_to_observation(self.U_target))
         
     
     def compute_fidelity(self):
-        # Convert the target unitary to Liouville space
+        # Convert the target unitary to Liouville space        
         U_target_dagger = self.U_target.conjugate().transpose()
         
         # Compute fidelity
@@ -366,27 +358,51 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
         return (delta + alpha) * Z + gamma_magnitude * (np.cos(gamma_phase) * X + np.sin(gamma_phase) * Y)
     
     def is_fidelity_consistent(self, threshold, steps):
-        # Check if the fidelity history consistently meets or exceeds the threshold
+        """
+        Check if training performance is good enough to switch gates.
+        Uses average fidelity, stability, and recent performance.
+        """
         if len(self.fidelity_history) < steps:
             return False
-    
-        recent_fidelities = self.fidelity_history[-steps:]
-                
-        # # Calculate the average fidelity of values above the threshold
-        # above_threshold = [f for f in recent_fidelities if f >= threshold]
-        # if not above_threshold:  # No values meet the threshold
-        #     return False
         
         recent_fidelities = self.fidelity_history[-steps:]
-        if all(f >= threshold for f in recent_fidelities):
-            print("Gate switch logic fidelity values:", recent_fidelities)
+        
+        # Calculate key metrics
+        avg_fidelity = np.mean(recent_fidelities)
+        std_dev = np.std(recent_fidelities)
+        recent_trend = np.mean(recent_fidelities[-5:]) - np.mean(recent_fidelities[:5])
+        min_recent = np.min(recent_fidelities[-3:])  # Look at most recent performance
+        
+        # Define switching criteria
+        is_high_enough = avg_fidelity >= threshold
+        is_stable = std_dev < 0.05  # Adjust this threshold based on your needs
+        is_not_declining = recent_trend >= -0.01  # Allow tiny negative trend
+        recent_good = min_recent >= threshold - 0.05  # Recent performance within 5% of threshold
+        
+        # Debug printing (every 100 steps)
+        if len(self.fidelity_history) % 100 == 0:
+            print(f"\nFidelity Check Metrics:")
+            print(f"Average Fidelity: {avg_fidelity:.3f}")
+            print(f"Standard Deviation: {std_dev:.3f}")
+            print(f"Recent Trend: {recent_trend:.3f}")
+            print(f"Minimum Recent: {min_recent:.3f}")
+        
+        # Gate switch logic
+        if is_high_enough and is_stable and is_not_declining and recent_good:
+            print("\nGate Switch Triggered!")
+            print(f"Recent fidelities: {recent_fidelities}")
+            print(f"Avg: {avg_fidelity:.3f}, Std: {std_dev:.3f}")
+            print(f"Trend: {recent_trend:.3f}, Min Recent: {min_recent:.3f}")
             return True
+            
         return False
 
 
     
     def next_environment(self):
         print(f"Gate switch occurred at timestep {self.timesteps_total}.")
+        self.steps_since_gate_switch = 0  # Increment steps since last switch
+
         # Update to the next gate in the circular pointer
         self.current_target_gate_pointer = (self.current_target_gate_pointer + 1) % len(self.multi_gate_training_list)
         next_gate = self.multi_gate_training_list[self.current_target_gate_pointer]
@@ -419,6 +435,8 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
 
     def step(self, action):
         self.timesteps_total +=1
+        self.steps_since_gate_switch += 1  # Increment steps since last switch
+
         num_time_bins = 2 ** (self.current_Haar_num - 1) # Haar number decides the number of time bins
 
         # action space setting

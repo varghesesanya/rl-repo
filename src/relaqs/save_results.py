@@ -113,3 +113,32 @@ class SaveResults():
         if self.results is not None:
             self.save_train_results_data()
         return self.save_path
+    
+    def save_env_transitions_inference(self):
+        columns = ['Fidelity', 'Rewards', 'Actions', 'Operator', 'Episode Id', 'Gate_Index']
+        
+        # Create DataFrame with gate index information
+        df = pd.DataFrame(self.env.transition_history, columns=columns[:-1])  # Original columns
+        
+        # Save with appropriate naming that includes gate information
+        base_name = "env_data_inference"
+        df.to_pickle(self.save_path + f"{base_name}.pkl")
+        df.to_csv(self.save_path + f"{base_name}.csv", index=False)
+
+    def save_inference_summary(self, inference_gates):
+        """Save summary of inference results for multiple gates."""
+        summary_path = os.path.join(self.save_path, "inference_summary.txt")
+        
+        with open(summary_path, 'w') as f:
+            f.write("Inference Results Summary\n")
+            f.write("=======================\n\n")
+            
+            for idx, gate in enumerate(inference_gates):
+                f.write(f"Gate {idx + 1}:\n")
+                transition_data = pd.DataFrame(self.env.transition_history)
+                fidelities = transition_data[0]  # Assuming fidelity is first column
+                
+                f.write(f"Average Fidelity: {np.mean(fidelities):.4f}\n")
+                f.write(f"Max Fidelity: {np.max(fidelities):.4f}\n")
+                f.write(f"Min Fidelity: {np.min(fidelities):.4f}\n")
+                f.write(f"Std Dev: {np.std(fidelities):.4f}\n\n")

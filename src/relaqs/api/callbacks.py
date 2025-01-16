@@ -9,10 +9,13 @@ from  torch.linalg import vector_norm
 from typing import Dict, Tuple
 
 class GateSynthesisCallbacks(DefaultCallbacks):
-    def __init__(self, target_fidelity=0.9, check_steps=10):
+    learning_started = False  # Add a flag to track learning state
+
+    def __init__(self, target_fidelity=0.75, check_steps=10):
         self.target_fidelity = target_fidelity
         self.check_steps = check_steps
-        self.learning_started = False  # Add a flag to track learning state
+        self.steps_since_gate_switch = 0
+        self.gate_switch_exploration_steps = 5000
         super().__init__()
         
     def on_train_result(self, *, algorithm, result, **kwargs):
@@ -40,12 +43,34 @@ class GateSynthesisCallbacks(DefaultCallbacks):
         episode.hist_data["average_gradnorm"] =[]
         episode.hist_data["actions"]=[]
         
-    def on_episode_end(self, *, worker="RolloutWorker", base_env, policies, episode, **kwargs):
-        env = base_env.get_sub_environments()[0]  # Assuming a single environment
-        # Use the normalized threshold
+    def on_episode_end(self, *, worker, base_env, policies, episode, **kwargs):
+        env = base_env.get_sub_environments()[0]
+        policy = worker.get_policy()
+
+        # Only check for gate switch if we're past initial training
         if env.is_fidelity_consistent(threshold=self.target_fidelity, steps=self.check_steps):
             print(f"Gate {env.U_target_key}: Fidelity consistent! Moving to next gate.")
-            env.next_environment()            # # Increase exploration for the next 1000 timesteps (adjust as needed)
+            
+            # Reset exploration on gate switch
+            policy.exploration.scale = 0.8
+            self.steps_since_gate_switch = 0
+            decay_factor = 1.0 - (self.steps_since_gate_switch / self.gate_switch_exploration_steps)
+            policy.exploration.scale = max(0.02, decay_factor)
+                #     self.steps_since_gate_switch += 1
+                    
+            
+            # Switch gate
+            env.next_environment()
+                
+                # # Handle exploration decay only after a gate switch
+                # if self.steps_since_gate_switch < self.gate_switch_exploration_steps:
+                #     decay_factor = 1.0 - (self.steps_since_gate_switch / self.gate_switch_exploration_steps)
+                #     policy.exploration.scale = max(0.02, decay_factor)
+                #     self.steps_since_gate_switch += 1
+                    
+                    
+                    
+                    
             # target_timestep = env.timesteps_total + 5000  # Adjust exploration duration
             
             
