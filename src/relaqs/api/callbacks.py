@@ -54,9 +54,9 @@ class GateSynthesisCallbacks(DefaultCallbacks):
             # Reset exploration on gate switch
             policy.exploration.scale = 0.8
             self.steps_since_gate_switch = 0
-            decay_factor = 1.0 - (self.steps_since_gate_switch / self.gate_switch_exploration_steps)
-            policy.exploration.scale = max(0.02, decay_factor)
-                #     self.steps_since_gate_switch += 1
+            #decay_factor = 1.0 - (self.steps_since_gate_switch / self.gate_switch_exploration_steps)
+            #policy.exploration.scale = max(0.02, decay_factor)
+            # self.steps_since_gate_switch += 1
                     
             
             # Switch gate
@@ -98,6 +98,25 @@ class GateSynthesisCallbacks(DefaultCallbacks):
             # for param in self.critic.parameters():
             #     param.requires_grad = False        
            
+    # def on_episode_end(self, *, worker, base_env, policies, episode, **kwargs):
+    #     env = base_env.get_sub_environments()[0]
+    #     policy = worker.get_policy()
+        
+    #     if env.is_fidelity_consistent(threshold=0.75, steps=10):
+    #         # Reset exploration on gate switch
+    #         self.steps_since_switch = 0
+    #         policy.exploration.scale = 1.0
+    #         env.next_environment()
+    #     else:
+    #         # Decay exploration
+    #         self.steps_since_switch += 1
+    #         if self.steps_since_switch < self.exploration_steps_after_switch:
+    #             decay = 1.0 - (self.steps_since_switch / self.exploration_steps_after_switch)
+    #             policy.exploration.scale = max(0.02, decay)
+
+    #     # Log exploration state
+    #     episode.custom_metrics["exploration_scale"] = policy.exploration.scale
+    #     episode.custom_metrics["steps_since_switch"] = self.steps_since_switch       
                   
                          
     def on_postprocess_trajectory(

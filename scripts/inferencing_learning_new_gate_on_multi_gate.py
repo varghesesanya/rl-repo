@@ -26,7 +26,7 @@ n_episodes_for_inferencing = 10
 save_training = True
 save_inference = True
 plot = True
-n_training_iterations = 100
+n_training_iterations = 500
 path_to_save_checkpoints = "/Users/sanyavarghese/rl-repo/src/policies/checkpoints/new_gate"
 
 # Generate random gates for training

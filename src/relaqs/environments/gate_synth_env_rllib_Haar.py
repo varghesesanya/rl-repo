@@ -203,11 +203,11 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
             "U_initial": I,  # staring with I
             "U_target": X,  # target for X
             "final_time": 35.5556E-9, # in seconds
-            "num_Haar_basis": 1,  # number of Haar basis (need to update for odd combinations)
-            "steps_per_Haar": 2,  # steps per Haar basis per episode
+            "num_Haar_basis": 3,  # number of Haar basis (need to update for odd combinations)
+            "steps_per_Haar": 4,  # steps per Haar basis per episode
             "delta": [0],  # qubit detuning
             "save_data_every_step": 1,
-            "verbose": True,
+            "verbose": False,
 #            "relaxation_rates_list": [[0.01,0.02],[0.05, 0.07]], # relaxation lists of list of floats to be sampled from when resetting environment.
 #            "relaxation_ops": [sigmam(),sigmaz()] #relaxation operator lists for T1 and T2, respectively
             "relaxation_rates_list": [[314159]], # relaxation lists of list of floats to be sampled from when resetting environment. (10 usec)
@@ -223,11 +223,11 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
             "U_target": target_gate.get_matrix(),
             "U_target_key":target_gate.__str__(),
             "final_time": 35.5556E-9, # in seconds
-            "num_Haar_basis": 1,  # number of Haar basis (need to update for odd combinations)
-            "steps_per_Haar": 2,  # steps per Haar basis per episode
+            "num_Haar_basis": 3,  # number of Haar basis (need to update for odd combinations)
+            "steps_per_Haar": 4,  # steps per Haar basis per episode
             "delta": [0],  # qubit detuning
             "save_data_every_step": 1,
-            "verbose": True,
+            "verbose": False,
 #            "relaxation_rates_list": [[0.01,0.02],[0.05, 0.07]], # relaxation lists of list of floats to be sampled from when resetting environment.
 #            "relaxation_ops": [sigmam(),sigmaz()] #relaxation operator lists for T1 and T2, respectively
             "relaxation_rates_list": [[314159]], # relaxation lists of list of floats to be sampled from when resetting environment. (10 usec)
@@ -244,11 +244,11 @@ class GateSynthEnvRLlibHaarNoisy(gym.Env):
             "U_target": target_gate.get_matrix(),  # target for Y
             "U_target_key":target_gate.__str__(),
             "final_time": 35.5556E-9, # in seconds
-            "num_Haar_basis": 1,  # number of Haar basis (need to update for odd combinations)
-            "steps_per_Haar": 2,  # steps per Haar basis per episode
+            "num_Haar_basis": 3,  # number of Haar basis (need to update for odd combinations)
+            "steps_per_Haar": 4,  # steps per Haar basis per episode
             "delta": [0],  # qubit detuning
             "save_data_every_step": 1,
-            "verbose": True,
+            "verbose": False,
 #            "relaxation_rates_list": [[0.01,0.02],[0.05, 0.07]], # relaxation lists of list of floats to be sampled from when resetting environment.
 #            "relaxation_ops": [sigmam(),sigmaz()] #relaxation operator lists for T1 and T2, respectively
             "relaxation_rates_list": [[314159]], # relaxation lists of list of floats to be sampled from when resetting environment. (10 usec)
